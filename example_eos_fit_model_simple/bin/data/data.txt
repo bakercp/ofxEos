@@ -1,0 +1,6 @@
+eos/examples/data/image_0010.png image_0010.png
+eos/examples/data/image_0010.pts image_0010.pts
+eos/examples/data/notes.txt notes.txt
+
+eos/share/sfm_shape_3448.bin sfm_shape_3448.bin
+eos/share/ibug_to_sfm.txt ibug_to_sfm.txt

@@ -1,0 +1,560 @@
+#!/usr/bin/env bash
+set -e
+
+#set -x # run script in debug mode
+set -o pipefail  # Trace ERR through pipes.
+set -o errtrace  # Trace ERR through 'time command' and other functions.
+set -o nounset   # set -u : exit the script if you try to use an uninitialized variable.
+set -o errexit   # set -e : exit the script if any statement returns a non-true return value.
+
+# Helpful env variables.
+DEFAULT_CLONE_DEPTH=1
+# export MAKEFLAGS="-s"
+
+PARALLEL_MAKE=4
+
+# Is verbose?
+_VERBOSE=0
+
+HELP="usage: ofx [options] <command> [command parameters]
+about:
+ This is ofx, the openFrameworks addons multi-tool.
+commands:
+  clean
+options:
+  -h  print this usage guide
+examples:
+  # update core dependencies
+  apothecary update depends
+"
+
+# Trap the killer signals so that we can exit with a good message
+trap "trapSignal SIGHUP" SIGHUP
+trap "trapSignal SIGINT" SIGINT
+trap "trapSignal SIGTERM" SIGTERM
+
+trapSignal() { echo; echoError " Received signal $1"; exit 1; }
+
+# trap any script errors and exit
+trap "trapError" ERR
+
+trapError() { echo; echoError " ^ Received error ^"; exit 1; }
+
+# ANSI console escape codes.
+CON_DEFAULT="\033[0m"
+CON_BOLD="\033[1m"
+CON_RED="\033[31m"
+CON_YELLOW="\033[33m"
+CON_GREEN="\033[32m"
+CON_YELLOW_UNDERLINE="\033[33;1;4m"
+
+# Console printing functions (with color)
+echoError()   { echo -e "❌  $CON_BOLD$CON_RED$1$CON_DEFAULT"; }
+echoWarning() { echo -e "⚠️  $CON_BOLD$CON_YELLOW$1$CON_DEFAULT"; }
+echoInfo()    { echo -e "ℹ️  $CON_BOLD$1$CON_DEFAULT"; }
+echoSuccess() { echo -e "✅  $CON_BOLD$CON_GREEN$1$CON_DEFAULT"; }
+echoVerbose() { if [ $_VERBOSE == 1 ] ; then echoInfo "$1"; fi }
+echoFancy() { echo -e "💪  ${1} $CON_YELLOW_UNDERLINE${2}$CON_DEFAULT ..."; }
+
+
+################################################################################
+# Parse Command Line
+# Reference: http://www.mkssoftware.com/docs/man1/getopts.1.asp
+################################################################################
+
+while getopts op:j:hv opt ; do
+  case "$opt" in
+    j) PARALLEL_MAKE=$OPTARG ; ;;
+    p) PROJECT_GENERATOR_PATH=$OPTARG ; ;;
+    o) OF_ROOT=$OPTARG ; ;;
+    h) echoInfo "$HELP" ; exit 1 ;;
+    v) _VERBOSE=1 ;;
+    [?]) echoInfo "$HELP" ; exit 1 ;;
+  esac
+done
+shift "$((OPTIND-1))"
+
+# Get command.
+if [ $# -gt 0 ] ; then
+  A_CMD=$1
+else
+  echoWarning "Missing command. See help: '$0 -h'."
+  exit 1
+fi
+
+shift 1
+
+# Some commands don't require targets.
+if ! [ $A_CMD = "bootstrap" ]; then
+  # check for arguments
+  if [ $# -lt 1 ] ; then
+    echoError " Missing command target. See help: 'apothecary -h'."
+    exit 1
+  fi
+fi
+
+# Set defaults based on environment.
+_CI=${CI:-}
+_APPVEYOR=${APPVEYOR:-}
+_TRAVIS=${TRAVIS:-}
+
+# This script should live in the scripts directory of the addon.
+if [ ! -z ${_CI} ] && [ "$_CI" = true ]; then
+  OF_ROOT=${OF_ROOT:-~/openFrameworks}
+  if [ ! -z ${_APPVEYOR} ] && [ "$_APPVEYOR" = true ]; then
+    THIS_ADDON_NAME=${APPVEYOR_PROJECT_SLUG#*/}
+    THIS_USERNAME=${APPVEYOR_PROJECT_SLUG%/*}
+    THIS_BRANCH=${APPVEYOR_REPO_BRANCH}
+  elif [ ! -z ${_TRAVIS} ] && [ "$_TRAVIS" = true ]; then
+    THIS_ADDON_NAME=${TRAVIS_REPO_SLUG#*/}
+    THIS_USERNAME=${TRAVIS_REPO_SLUG%/*}
+    THIS_BRANCH=${TRAVIS_BRANCH}
+  fi
+else
+  OF_ROOT=${OF_ROOT:-$(cd "$( dirname "${BASH_SOURCE[0]}" )/../../../.." && pwd)}
+  THIS_ADDON_NAME=$(basename "$(cd "$( dirname "${BASH_SOURCE[0]}" )/../.."  && pwd)")
+  THIS_USERNAME=$(whoami)
+  THIS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+fi
+
+# OF paths.
+OF_ADDONS_PATH=${OF_ADDONS_PATH:-${OF_ROOT}/addons}
+OF_SCRIPTS_PATH=${OF_SCRIPTS_PATH:-${OF_ROOT}/scripts}
+OF_APOTHECARY_PATH=${OF_APOTHECARY_PATH:-${OF_SCRIPTS_PATH}/apothecary}
+
+# Addon paths.
+THIS_ADDON_PATH=${THIS_ADDON_PATH:-${OF_ADDONS_PATH}/${THIS_ADDON_NAME}}
+THIS_ADDON_SHARED_PATH=${THIS_ADDON_SHARED_PATH:-${THIS_ADDON_PATH}/shared}
+THIS_ADDON_SHARED_DATA_PATH=${THIS_ADDON_SHARED_DATA_PATH:-${THIS_ADDON_SHARED_PATH}/data}
+THIS_ADDON_SCRIPTS_PATH=${THIS_ADDON_SCRIPTS_PATH:-${THIS_ADDON_PATH}/scripts}
+
+# OF Clone info.
+OF_CLONE_DEPTH=${OF_CLONE_DEPTH:-${DEFAULT_CLONE_DEPTH}}
+OF_CLONE_BRANCH=${OF_CLONE_BRANCH:-${THIS_BRANCH}}
+OF_CLONE_USERNAME=${OF_CLONE_USERNAME:-openFrameworks}
+
+# Addon Clone info.
+ADDON_CLONE_DEPTH=${ADDON_CLONE_DEPTH:-${DEFAULT_CLONE_DEPTH}}
+ADDON_CLONE_BRANCH=${ADDON_CLONE_BRANCH:-${THIS_BRANCH}}
+ADDON_CLONE_USERNAME=${ADDON_CLONE_USERNAME:-${THIS_USERNAME}}
+
+OF_PROJECT_GENERATOR_PATH=${OF_PROJECT_GENERATOR_PATH:-$OF_ROOT:/projectGenerator-osx}
+
+if [ $_VERBOSE == 1 ]; then
+  echo "================================================================================"
+  echo ""
+  echo "                                     _CI: ${_CI}"
+  echo "                               _APPVEYOR: ${_APPVEYOR}"
+  echo "                                 _TRAVIS: ${_TRAVIS}"
+  echo ""
+  echo "                                 OF_ROOT: ${OF_ROOT}"
+  echo "                          OF_ADDONS_PATH: ${OF_ADDONS_PATH}"
+  echo "                         OF_SCRIPTS_PATH: ${OF_SCRIPTS_PATH}"
+  echo "                      OF_APOTHECARY_PATH: ${OF_APOTHECARY_PATH}"
+  echo "               OF_PROJECT_GENERATOR_PATH: ${OF_PROJECT_GENERATOR_PATH}"
+  echo ""
+  echo "                         THIS_ADDON_NAME: ${THIS_ADDON_NAME}"
+  echo "                         THIS_ADDON_PATH: ${THIS_ADDON_PATH}"
+  echo "             THIS_ADDON_SHARED_DATA_PATH: ${THIS_ADDON_SHARED_DATA_PATH}"
+  echo "                 THIS_ADDON_SCRIPTS_PATH: ${THIS_ADDON_SCRIPTS_PATH}"
+  echo ""
+  echo "                           THIS_USERNAME: ${THIS_USERNAME}"
+  echo "                             THIS_BRANCH: ${THIS_BRANCH}"
+  echo ""
+  echo "                          OF_CLONE_DEPTH: ${OF_CLONE_DEPTH}"
+  echo "                         OF_CLONE_BRANCH: ${OF_CLONE_BRANCH}"
+  echo "                       OF_CLONE_USERNAME: ${OF_CLONE_USERNAME}"
+  echo ""
+  echo "                       ADDON_CLONE_DEPTH: ${ADDON_CLONE_DEPTH}"
+  echo "                      ADDON_CLONE_BRANCH: ${ADDON_CLONE_BRANCH}"
+  echo "                    ADDON_CLONE_USERNAME: ${ADDON_CLONE_USERNAME}"
+  echo ""
+  echo "================================================================================"
+fi
+
+################################################################################
+# Functions
+################################################################################
+
+# \returns the string as lowercase.
+function lowercase()
+{
+  echo "${1}" | sed "y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/"
+  return 0
+}
+
+# \returns the name of the OS.
+function os()
+{
+  local OS
+  OS="$(lowercase "$(uname)")"
+
+  if [ "${OS}" == "darwin" ]; then
+    OS="osx"
+  elif [ "${OS}" == "windowsnt" ] ; then
+    OS="vs"
+  elif [ "${OS:0:5}" == "mingw" ] || [ "${OS}" == "msys_nt-6.3" ]; then
+    OS="msys2"
+  elif [ "${OS}" == "linux" ]; then
+    ARCH=`uname -m`
+    if [ "${ARCH}" == "i386" ] || [ "${ARCH}" == "i686" ] ; then
+      OS="linux"
+    elif [ "${ARCH}" == "x86_64" ] ; then
+      OS="linux64"
+    elif [ "${ARCH}" == "armv6l" ] ; then
+      OS="linuxarmv6l"
+    elif [ "${ARCH}" == "armv7l" ] ; then
+      # Make an exception for raspberry pi to run on armv6l, to conform
+      # with openFrameworks.
+      if [ -f /opt/vc/include/bcm_host.h ]; then
+        OS="linuxarmv6l"
+      else
+        OS="linuxarmv7l"
+      fi
+    else
+      # We don't know this one, but we will try to make a reasonable guess.
+      OS="linux"${ARCH}
+    fi
+  fi
+  echo ${OS}
+  return 0
+}
+
+
+function is_same_file()
+{
+  cmp --silent $1 $2 && echo "1" || echo "0"
+  return 0;
+}
+
+function clean_example_project_files()
+{
+  echoFancy "Cleaning" "project files"
+  find ${THIS_ADDON_PATH}/example* -maxdepth 1 \
+  \( \
+       -name "*.qbs" \
+    -o -name "*.xcodeproj" \
+    -o -name "*.xcconfig" \
+    -o -name "*.plist" \
+    -o -name "*.qbs.user" \
+  \) \
+  -exec rm -rf {} \;
+
+
+
+  # Determine any dependencies that should be installed.
+  # If no OS is specified, use the system OS.
+  # TARGET=${2:-$(os)}
+  #
+  # TEMPLATE_MAKEFILE=${OF_SCRIPTS_PATH}/templates/${TARGET}/Makefile
+  # TEMPLATE_CONFIG_MAKE=${OF_SCRIPTS_PATH}/templates/${TARGET}/config.make
+  #
+  # for example in ${THIS_ADDON_PATH}/example*; do
+  #   THIS_MAKEFILE=${example}/Makefile
+  #   THIS_CONFIG_MAKE=${example}/config.make
+  #   if [ -f ${THIS_MAKEFILE} ] && [ "$(is_same_file "${TEMPLATE_MAKEFILE}" "${THIS_MAKEFILE}")" == "1" ]; then
+  #     rm "${THIS_MAKEFILE}"
+  #   fi
+  #   if [ -f ${THIS_CONFIG_MAKE} ] && [ "$(is_same_file "${TEMPLATE_CONFIG_MAKE}" "${THIS_CONFIG_MAKE}")" == "1" ]; then
+  #     rm "${THIS_CONFIG_MAKE}"
+  #   fi
+  # done
+
+}
+
+function clean_example_build_files()
+{
+  echoFancy "Cleaning" "QTCreatorBuild paths"
+  find ${THIS_ADDON_PATH}/ -maxdepth 1 \( \
+       -type d -a \
+       -name "build-example*" \
+    \)  -exec rm -rf {} \;
+
+    find ${THIS_ADDON_PATH}/ -maxdepth 1 \( \
+         -type d -a \
+         -name "_obj*" \
+      \)  -exec rm -rf {} \;
+
+  echoFancy "Cleaning" "project build files"
+  find ${THIS_ADDON_PATH}/example* -maxdepth 1 \( \
+       -type d -a \
+       -name "obj" \
+    \)  -exec rm -rf {} \;
+
+  echoFancy "Cleaning" "project app files"
+  find ${THIS_ADDON_PATH}/example*/bin -maxdepth 1 \( \
+       -name "*.app" \
+    -o -name "*.app.dSYM" \
+    -o -name "PkgInfo" \
+    -o -name ".tmp" \
+    -o -name "*.plist" \
+    \)  -exec rm -rf {} \;
+
+  return 0;
+}
+
+function clean_apothecary()
+{
+  if ! [ -f ${OF_APOTHECARY_PATH}/apothecary/apothecary ] ; then
+    echoError "Apothecary not installed."
+    exit 1;
+  fi
+
+  # Determine any dependencies that should be installed.
+  # If no OS is specified, use the system OS.
+  TARGET=${1:-$(os)}
+  echoFancy "Building " "${THIS_ADDON_NAME} libraries for ${TARGET}"
+  /usr/bin/env bash ${OF_APOTHECARY_PATH}/apothecary/apothecary -j${PARALLEL_MAKE} -t "${TARGET}" -d "${THIS_ADDON_PATH}/libs" clean "${THIS_ADDON_NAME}"
+  echoSuccess "Cleaning of ${THIS_ADDON_NAME} for ${TARGET} complete."
+}
+
+
+function install_apothecary()
+{
+  # Check to see if apothecary is already installed.
+  if ! [ -f ${OF_APOTHECARY_PATH}/apothecary/apothecary ] ; then
+    echoInfo "Apothecary not installed, pulling latest version."
+    git clone https://github.com/openframeworks/apothecary.git ${OF_APOTHECARY_PATH}/
+  else
+    pushd "${OF_APOTHECARY_PATH}/" > /dev/null
+    if git rev-parse --is-inside-work-tree ; then
+        echoInfo "Apothecary is under git control, updating."
+        git pull origin master
+    else
+        echoWarning "Apothecary is not under git control, so it may not be up-to-date."
+    fi
+    popd > /dev/null
+  fi
+
+  # Determine any dependencies that should be installed.
+  # If no OS is specified, use the system OS.
+  TARGET=${1:-$(os)}
+
+  if [ "${TARGET}" == "osx" ] ; then
+    if ! [ -x "$(command -v brew)" ]; then
+      echoError "Brew is not installed. Go here and install it: https://brew.sh/." >&2
+      exit 1
+    else
+      echoInfo "Brew is installed, continuing."
+    fi
+
+    if xcrun -sdk iphoneos --show-sdk-version ; then
+      echoInfo "macOS iOS SDK Found"
+    else
+      echoError "The SDK path is not set correctly ..."
+
+      if ! [ -e "/Applications/Xcode.app/Contents/Developer" ]; then
+        echoError "Xcode is NOT installed."
+        echoError "Install it from the App Store, then open the application and agree to the license."
+      else
+        echoError "Xcode is installed, so try running:"
+        echo ""
+        echoWarning "    sudo xcode-select -s /Applications/Xcode.app/Contents/Developer/"
+        echo ""
+        echoWarning "    Or ..."
+        echo ""
+        echoWarning "    1) Open Xcode Preferences ..."
+        echoWarning "    2) Got to the Locations tab ..."
+        echoWarning "    3) Make sure the Command Line Tools are set to the latest version ..."
+        echo ""
+      fi
+
+      echoError "Then run this command again."
+
+      exit 1
+    fi
+  fi
+
+  # Install any apothecary dependencies.
+  if [ -f ${OF_APOTHECARY_PATH}/scripts/${TARGET}/install.sh ] ; then
+    echoFancy "Installing" "Apothecary Dependencies"
+    /usr/bin/env bash ${OF_APOTHECARY_PATH}/scripts/${TARGET}/install.sh
+  else
+    echoInfo "No additional apothecary dependencies to install."
+  fi
+
+  echoSuccess "Done installing apothecary."
+  return 0;
+}
+
+
+function install_dependencies()
+{
+  # Determine any dependencies that should be installed.
+  # If no OS is specified, use the system OS.
+  TARGET=${1:-$(os)}
+
+  echoFancy "Installing" "System Dependencies"
+
+  if [ -f ${THIS_ADDON_PATH}/scripts/${TARGET}/install.sh ] ; then
+    /usr/bin/env bash ${THIS_ADDON_PATH}/scripts/${TARGET}/install.sh
+  fi
+
+  echoFancy "Installing" "3rd Party Libraries"
+
+  if ! [ -f ${OF_APOTHECARY_PATH}/apothecary/apothecary ] ; then
+    echoError "Apothecary not installed."
+    exit 1;
+  fi
+
+  # Determine any dependencies that should be installed.
+  # If no OS is specified, use the system OS.
+  TARGET=${1:-$(os)}
+  echoFancy "Building " "${THIS_ADDON_NAME} libraries for ${TARGET}"
+  /usr/bin/env bash ${OF_APOTHECARY_PATH}/apothecary/apothecary -j4 -t "${TARGET}" -d "${THIS_ADDON_PATH}/libs" update "${THIS_ADDON_NAME}"
+  echoSuccess "Build of ${THIS_ADDON_NAME} for ${TARGET} complete."
+  return 0;
+}
+
+
+function install_shared_data()
+{
+  echoFancy "Installing" "shared data"
+
+  if [ -d ${THIS_ADDON_SHARED_DATA_PATH} ] ; then
+    SHARED_DATA_SCRIPTS=$(find ${THIS_ADDON_SHARED_DATA_PATH} -name *.sh)
+    for script in ${SHARED_DATA_SCRIPTS}; do
+      /usr/bin/env bash ${script}
+    done
+  fi
+
+  return 0;
+}
+
+
+function install_example_data()
+{
+  echoFancy "Installing" "example data"
+  if ls ${THIS_ADDON_PATH}/example*/bin/data/data.txt 1> /dev/null 2>&1; then
+    DATA_FILES=$(find ${THIS_ADDON_PATH}/example*/bin/data -name data.txt)
+    for data_file in ${DATA_FILES}
+    do
+      # For the example data path.
+      THIS_EXAMPLE_BIN_DATA_PATH=$(dirname "${data_file}")
+
+      # The || [ -n "$line" ]; is to help when the last line isn't a new line char.
+      while read line || [ -n "$line" ];
+      do
+        # Make sure the data doesn't start with a comment hash #
+        # Make sure that it isn't am empty line.
+        if [ "${line:0:1}" != "#"  ] && [ -n "${line// }" ]; then
+          IFS=' ' read -r -a tokens <<< "${line}" # Parse the tokens.
+          SRC=${tokens[0]} # Get the source location.
+          DST=${tokens[1]:-""} # Get the destination location, or nothing if missing.
+
+          if ! [[ ${SRC} == http* ]]; then
+            if [[ "$SRC" = /* ]]; then
+              SRC_PATH=${SRC}
+            else
+              SRC_PATH=${THIS_ADDON_SHARED_DATA_PATH}/${SRC}
+            fi
+
+            if [[ -z ${DST} ]]; then
+              if [[ "$SRC" = /* ]]; then
+                DST_PATH=${THIS_EXAMPLE_BIN_DATA_PATH}/$(basename "${SRC}")
+              else
+                DST_PATH=${THIS_EXAMPLE_BIN_DATA_PATH}/${SRC}
+              fi
+            else
+              DST_PATH=${THIS_EXAMPLE_BIN_DATA_PATH}/${DST}
+            fi
+
+            if ! [ -e ${DST_PATH} ]; then
+              if ! [ -e ${SRC_PATH} ]; then
+                echo "❌ ${SRC_PATH} does not exist. Did you install the shared data?"
+                continue
+              fi
+
+              mkdir -p "$(dirname "${DST_PATH}")"
+              rsync -Pvqar ${SRC_PATH} ${DST_PATH}
+            fi
+
+            echo "✅ ${SRC_PATH} 👉 ${DST_PATH}"
+          else
+            if [[ -z ${DST} ]]; then
+              DST=$(basename ${SRC})
+            fi
+            DST_PATH=${THIS_EXAMPLE_BIN_DATA_PATH}/${DST}
+            if ! [ -e ${DST_PATH} ]; then
+              curl --progress-bar --create-dirs -o ${DST_PATH} -L ${SRC}
+            fi
+            echo "✅ ${SRC} 👉 ${DST_PATH}"
+          fi
+        fi
+      done < ${data_file}
+    done
+  fi
+
+  return 0;
+}
+
+
+function clean()
+{
+  case "$1" in
+    all)
+      clean apothecary "$@"
+      clean projects "$@"
+      clean build "$@"
+      ;;
+    apothecary) shift 1; clean_apothecary "$@" ;;
+    projects) shift 1; clean_example_project_files "$@" ;;
+    build) shift 1; clean_example_build_files "$@" ;;
+    *)
+      echoError " Unknown clean target: \"$1\""
+      echoError " valid: all, projects, build"
+      exit 1 ;;
+  esac
+  return 0;
+}
+
+
+function install()
+{
+  case "$1" in
+    apothecary) shift 1; install_apothecary "$@" ;;
+    dependencies) shift 1; install_dependencies "$@" ;;
+    shared_data) shift 1; install_shared_data "$@" ;;
+    example_data) shift 1; install_example_data "$@" ;;
+    *)
+      echoError " Unknown install target: \"$1\""
+      echoError " valid: apothecary"
+      exit 1;;
+  esac
+  return 0;
+}
+
+
+function bootstrap()
+{
+  echoFancy "Bootstrapping" "${THIS_ADDON_NAME}"
+
+  echo -e "\n\t👢 \033[31;1;4m/ˈbo͞otˌstrap/\033[0m - \"a technique of loading a program into a"
+  echo -e "\tcomputer by means of a few initial instructions that enable "
+  echo -e "\tthe introduction of the rest of the program from an input"
+  echo -e "\tdevice.\"\n"
+
+  install_apothecary
+  install_dependencies
+  install_shared_data
+  install_example_data
+
+  return 0;
+}
+
+# handle commands
+echoVerbose "Running: $A_CMD $*"
+case "$A_CMD" in
+
+  clean)
+    clean "$@" ;;
+  install)
+    install "$@" ;;
+  bootstrap)
+    bootstrap "$@" ;;
+  *)
+    echoError " Unknown command \"$A_CMD\""
+    exit 1 ;;
+esac
+
+exit 0

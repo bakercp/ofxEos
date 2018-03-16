@@ -1,0 +1,9 @@
+eos/examples/data/image_0010.png image_0010.png
+eos/examples/data/image_0010.pts image_0010.pts
+eos/examples/data/notes.txt notes.txt
+
+eos/share/sfm_shape_3448.bin sfm_shape_3448.bin
+eos/share/ibug_to_sfm.txt ibug_to_sfm.txt
+eos/share/sfm_model_contours.json sfm_model_contours.json
+eos/share/sfm_3448_edge_topology.json sfm_3448_edge_topology.json
+eos/share/expression_blendshapes_3448.bin expression_blendshapes_3448.bin
