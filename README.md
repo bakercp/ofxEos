@@ -1,9 +1,8 @@
-# ofxEOS
-
+# ofxEos
 
 ## Description
 
-An [openFrameworks](http://openframeworks.cc) wrapper for [EOS](https://github.com/patrikhuber/eos).
+An [openFrameworks](http://openframeworks.cc) wrapper for [eos](https://github.com/patrikhuber/eos).
 
 ## Features
 
@@ -23,7 +22,7 @@ API documentation can be found here.
 
 ## Build Status
 
-Linux, macOS [![Build Status](https://travis-ci.org/bakercp/ofxEOS.svg?branch=master)](https://travis-ci.org/bakercp/ofxEOS)
+Linux, macOS [![Build Status](https://travis-ci.org/bakercp/ofxEos.svg?branch=master)](https://travis-ci.org/bakercp/ofxEos)
 
 Visual Studio, MSYS [![Build status](https://ci.appveyor.com/api/projects/status/sajxjsuk0m65wl0a/branch/master?svg=true)](https://ci.appveyor.com/project/bakercp/ofxeos/branch/master)
 

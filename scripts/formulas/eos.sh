@@ -5,7 +5,7 @@
 # uses CMake
 
 # define the version
-VER=b6f497509c81bcbff7fb141ebd52a1c4aa2a6cad
+VER=master
 
 # tools for git use
 GIT_URL="https://github.com/bakercp/eos.git"
