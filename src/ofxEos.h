@@ -8,8 +8,7 @@
 #pragma once
 
 
-#include "ofxCv.h"
-#include "ofxDlib.h"
+#include "ofxOpenCv.h"
 #include "ofxEigen.h"
 
 
@@ -77,3 +76,8 @@
 #include "eos/cpp17/detail/akrzemi1_optional.hpp"
 
 
+#include "ofx/Eos/Utils.h"
+#include "ofx/Eos/Model.h"
+
+
+namespace ofxEos = ofx::Eos;

@@ -1,8 +1,7 @@
 ofxCereal
-ofxCv
-ofxDlib
-ofxEos
 ofxEigen
+ofxEos
+ofxGui
 ofxOpenCv
 ofxSpatialHash
 ofxTOML
