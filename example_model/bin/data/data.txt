@@ -1,0 +1,2 @@
+eos/share/sfm_shape_3448.bin sfm_shape_3448.bin
+eos/share/expression_blendshapes_3448.bin expression_blendshapes_3448.bin
