@@ -10,7 +10,7 @@
 
 #include "ofMain.h"
 #include "ofxGui.h"
-#include "ofxEOS.h"
+#include "ofxEos.h"
 
 
 class ofApp: public ofBaseApp
