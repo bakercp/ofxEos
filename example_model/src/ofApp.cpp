@@ -124,29 +124,7 @@ void ofApp::setupGui()
         colorCoefficentsGroup.add(colorCoefficientsParams.back().set("Comp: " + ofToString(i), 0, -3.5, 3.5));
         colorCoefficientsParams.back().addListener(this, &ofApp::modelUpdated);
     }
-    
-
-
-    buttonsListeners.clear();
-    
-    buttonsListeners.emplace_back(randomShapeCoefficients.newListener([&](void) {
-        ///
-    }));
-    
-//    ofxButton<void> randomShapeCoefficients;
-//    ofxButton<void> resetShapeCoefficients;
-//
-//    ofxButton<void> randomBlendShapeCoefficients;
-//    ofxButton<void> resetBlendShapeCoefficients;
-//
-//    ofxButton<void> randomColorCoefficients;
-//    ofxButton<void> resetColorCoefficients;;
-//
-//    std::vector<ofEventListener> buttonsListeners;
-
-    
-    
-    
+        
     guiShape.setup(shapeCoefficentsGroup);
 
     guiBlend.setup(blendShapeCoefficentsGroup);

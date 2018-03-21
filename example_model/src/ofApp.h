@@ -42,16 +42,11 @@ public:
     std::vector<ofParameter<float>> colorCoefficientsParams;
     std::vector<float> colorCoefficients;
 
-    ofxButton randomShapeCoefficients;
-    ofxButton resetShapeCoefficients;
-
     ofParameter<void> randomBlendShapeCoefficients;
     ofParameter<void> resetBlendShapeCoefficients;
 
     ofParameter<void> randomColorCoefficients;
     ofParameter<void> resetColorCoefficients;;
-
-    std::vector<ofEventListener> buttonsListeners;
     
     bool modelNeedsUpdate = true;
     
