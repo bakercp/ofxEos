@@ -9,21 +9,21 @@
 
 
 #include "ofMain.h"
-#include "ofxCv.h"
-#include "ofxEOS.h"
-#include "ofxAssimpModelLoader.h"
+#include "ofxEos.h"
+#include "ofxFaceTracker2.h"
 
 
 class ofApp: public ofBaseApp
 {
 public:
     void setup() override;
+    void update() override;
     void draw() override;
-    
-    
+
+    ofxFaceTracker2 tracker;
+    ofVideoGrabber grabber;
+
+    ofxEos::Model model;
+  
     ofEasyCam cam;
-    ofTexture imageWithMesh;
-    ofTexture image;
-    ofxAssimpModelLoader generatedModel;
-    
 };

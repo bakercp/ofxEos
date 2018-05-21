@@ -6,6 +6,6 @@ meta:
 	ADDON_URL = http://github.com/bakercp/ofxEOS
 
 common:
-	ADDON_DEPENDENCIES = ofxDlib ofxCv ofxOpenCv ofxEigen ofxCereal ofxTOML ofxSpatialHash
+	ADDON_DEPENDENCIES = ofxOpenCv ofxEigen ofxCereal ofxTOML ofxSpatialHash
 	ADDON_DEFINES =
 	ADDON_CFLAGS = -O3 -Wno-strict-aliasing

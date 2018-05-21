@@ -10,6 +10,12 @@
 
 #include "ofxOpenCv.h"
 #include "ofxEigen.h"
+#include "ofxCv.h"
+
+// Include essential OpenCv stuff that isn't included with ofxOpenCv.h.
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 
 
 // N.B. We don't need to include all of these, but it's a quick way to make sure

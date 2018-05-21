@@ -62,8 +62,6 @@ void ofApp::update()
             _mesh.addIndex(mesh.tvi[i][1]);
             _mesh.addIndex(mesh.tvi[i][2]);
         }
-
-//        _mesh.getFaceNormals()
         
         modelNeedsUpdate = false;
     }

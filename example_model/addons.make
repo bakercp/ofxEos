@@ -1,4 +1,5 @@
 ofxCereal
+ofxCv
 ofxEigen
 ofxEos
 ofxGui
