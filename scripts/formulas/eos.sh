@@ -5,10 +5,10 @@
 # uses CMake
 
 # define the version
-VER=0.16.1
+VER=v0.16.1
 
 # tools for git use
-GIT_URL="https://github.com/bakercp/eos.git"
+GIT_URL="https://github.com/patrikhuber/eos.git"
 GIT_TAG=$VER
 
 FORMULA_TYPES=( "osx" "linux64")
