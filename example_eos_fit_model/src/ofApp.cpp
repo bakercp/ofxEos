@@ -21,7 +21,7 @@ void ofApp::setup()
      */
 
     
-    std::filesystem::path imageFile = "indoor_220.png";
+    std::filesystem::path imageFile = "image_0010.png";
     
     auto basename = std::filesystem::path(imageFile).stem();
     
@@ -112,14 +112,18 @@ void ofApp::setup()
     outputfile.replace_extension(".obj");
     eos::core::write_textured_obj(mesh, outputfile.string());
 
-    // Re-load the model.
-    generatedModel.loadModel(outputfile.string());
+    auto objectFile = outputfile;
     
     // And save the isomap:
     outputfile.replace_extension(".isomap.png");
 
     ofxCv::toOf(eos::core::to_mat(isomap), outPix);
     ofSaveImage(outPix, outputfile.string());
+
+    // Re-load the model.
+    generatedModel.loadModel(objectFile.string());
+    generatedModel.setScale(1, -1, 1);
+    
 
 }
 
