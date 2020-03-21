@@ -17,6 +17,7 @@ FORMULA_TYPES=( "osx" "linux64")
 function download() {
     git clone --depth=1 ${GIT_URL} eos/
     cd eos/
+    git fetch
     git checkout ${GIT_TAG}
 }
 
